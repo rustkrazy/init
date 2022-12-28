@@ -1,3 +1,4 @@
+use anyhow::bail;
 use std::fs;
 use std::io::Write;
 use std::process::Command;
@@ -12,10 +13,10 @@ fn start() -> anyhow::Result<()> {
 
     for service in fs::read_dir("/bin")? {
         let service = service?;
-        let service_name = service
-            .file_name()
-            .into_string()
-            .expect("invalid unicode in file name");
+        let service_name = match service.file_name().into_string() {
+            Ok(v) => v,
+            Err(_) => bail!("[ ERROR ] invalid unicode in file name"),
+        };
 
         if service_name == "init" {
             continue;
