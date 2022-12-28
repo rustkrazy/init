@@ -1,10 +1,14 @@
 use anyhow::bail;
-use std::fs;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::os::fd::AsFd;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::thread;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+
+fn null() -> anyhow::Result<File> {
+    Ok(File::open("/dev/null")?)
+}
 
 fn start() -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -24,9 +28,7 @@ fn start() -> anyhow::Result<()> {
         }
 
         let mut cmd = Command::new(service.path());
-        cmd.stderr(Stdio::null())
-            .stdin(Stdio::null())
-            .stdout(Stdio::null());
+        cmd.stderr(null()?).stdin(null()?).stdout(null()?);
 
         match cmd.spawn() {
             Ok(_) => {
