@@ -25,17 +25,17 @@ fn start() -> anyhow::Result<()> {
         match Command::new(service.path()).spawn() {
             Ok(_) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                writeln!(&mut stdout, "[  OK   ] Starting {}", service_name)?;
+                write!(&mut stdout, "[  OK   ] Starting {}", service_name)?;
 
                 stdout.reset()?;
-                stdout.flush()?;
+                writeln!(&mut stdout)?;
             }
             Err(e) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                writeln!(&mut stdout, "[ ERROR ] Starting {}: {}", service_name, e)?;
+                write!(&mut stdout, "[ ERROR ] Starting {}: {}", service_name, e)?;
 
                 stdout.reset()?;
-                stdout.flush()?;
+                writeln!(&mut stdout)?;
             }
         }
     }
