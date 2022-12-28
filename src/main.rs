@@ -1,14 +1,9 @@
 use anyhow::bail;
-use std::fs::{self, File};
-use std::io::{self, Write};
-use std::os::fd::AsFd;
+use std::fs;
+use std::io::Write;
 use std::process::Command;
 use std::thread;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-
-fn null() -> anyhow::Result<File> {
-    Ok(File::open("/dev/null")?)
-}
 
 fn start() -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -27,20 +22,13 @@ fn start() -> anyhow::Result<()> {
             continue;
         }
 
-        let mut cmd = Command::new(service.path());
-        cmd.stderr(null()?).stdin(null()?).stdout(null()?);
-
-        match cmd.spawn() {
+        match Command::new(service.path()).spawn() {
             Ok(_) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
                 writeln!(&mut stdout, "[  OK   ] Starting {}", service_name)?;
 
                 stdout.reset()?;
                 stdout.flush()?;
-
-                cmd.stderr(io::stderr().as_fd().try_clone_to_owned()?);
-                cmd.stdin(io::stdin().as_fd().try_clone_to_owned()?);
-                cmd.stdout(io::stdout().as_fd().try_clone_to_owned()?);
             }
             Err(e) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
