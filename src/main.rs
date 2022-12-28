@@ -30,6 +30,7 @@ fn start() -> anyhow::Result<()> {
             Err(e) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
                 writeln!(&mut stdout, "[ ERROR ] Starting {}: {}", service_name, e)?;
+                stdout.set_color(&ColorSpec::new())?;
             }
         }
     }
