@@ -28,7 +28,6 @@ fn start() -> anyhow::Result<()> {
                 writeln!(&mut stdout, "[  OK   ] Starting {}", service_name)?;
 
                 stdout.reset()?;
-                write!(&mut stdout, "")?;
                 stdout.flush()?;
             }
             Err(e) => {
@@ -36,7 +35,6 @@ fn start() -> anyhow::Result<()> {
                 writeln!(&mut stdout, "[ ERROR ] Starting {}: {}", service_name, e)?;
 
                 stdout.reset()?;
-                write!(&mut stdout, "")?;
                 stdout.flush()?;
             }
         }
