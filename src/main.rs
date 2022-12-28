@@ -17,6 +17,10 @@ fn start() -> anyhow::Result<()> {
             .into_string()
             .expect("invalid unicode in file name");
 
+        if service_name == "init" {
+            continue;
+        }
+
         match Command::new(service.path()).spawn() {
             Ok(_) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
