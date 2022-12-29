@@ -1,7 +1,7 @@
 use anyhow::bail;
 use std::fs;
 use std::io::Write;
-use std::process::Command;
+use std::process::{self, Command, ExitCode};
 use std::thread;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -43,22 +43,34 @@ fn start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() {
-    match start() {
-        Ok(_) => {}
-        Err(e) => {
-            let mut stdout = StandardStream::stdout(ColorChoice::Always);
+fn main() -> ExitCode {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-            match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                Ok(_) => match writeln!(&mut stdout, "[ ERROR ] {}", e) {
-                    Ok(_) => {}
-                    Err(_) => println!("[ ERROR ] {}", e),
-                },
-                Err(_) => {
-                    println!("[ ERROR ] {}", e);
-                }
+    if process::id() != 1 {
+        match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+            Ok(_) => match writeln!(&mut stdout, "Must be run as PID 1") {
+                Ok(_) => {}
+                Err(_) => println!("Must be run as PID 1"),
+            },
+            Err(_) => {
+                println!("Must be run as PID 1");
             }
         }
+
+        return ExitCode::FAILURE;
+    }
+
+    match start() {
+        Ok(_) => {}
+        Err(e) => match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+            Ok(_) => match writeln!(&mut stdout, "[ ERROR ] {}", e) {
+                Ok(_) => {}
+                Err(_) => println!("[ ERROR ] {}", e),
+            },
+            Err(_) => {
+                println!("[ ERROR ] {}", e);
+            }
+        },
     }
 
     loop {
