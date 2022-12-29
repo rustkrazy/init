@@ -3,6 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::process::{self, Command, ExitCode};
 use std::thread;
+use std::time::Duration;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 fn start() -> anyhow::Result<()> {
@@ -74,6 +75,6 @@ fn main() -> ExitCode {
     }
 
     loop {
-        thread::yield_now();
+        thread::sleep(Duration::MAX);
     }
 }
