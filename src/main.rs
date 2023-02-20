@@ -55,7 +55,10 @@ fn main() -> ExitCode {
 
     for dev in devs {
         match Mount::builder().fstype("vfat").mount(dev, "/boot") {
-            Ok(v) => mount = Some(v.into_unmount_drop(UnmountFlags::DETACH)),
+            Ok(v) => {
+                mount = Some(v.into_unmount_drop(UnmountFlags::DETACH));
+                break;
+            }
             Err(e) => {
                 mount_err = Some(e);
             }
