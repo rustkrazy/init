@@ -48,11 +48,29 @@ fn start() -> anyhow::Result<()> {
 fn main() -> ExitCode {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    let _mount = Mount::builder()
+    let _mount;
+
+    match Mount::builder()
         .fstype("vfat")
         .mount("/dev/disk/by-partuuid/00000000-01", "/boot")
-        .expect("can't mount boot partition")
-        .into_unmount_drop(UnmountFlags::DETACH);
+    {
+        Ok(v) => _mount = v.into_unmount_drop(UnmountFlags::DETACH),
+        Err(e) => {
+            match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+                Ok(_) => match writeln!(&mut stdout, "[ ERROR ] Can't mount /boot: {}", e) {
+                    Ok(_) => {}
+                    Err(_) => println!("[ ERROR ] Can't mount /boot: {}", e),
+                },
+                Err(_) => {
+                    println!("[ ERROR ] Can't mount /boot: {}", e);
+                }
+            }
+
+            loop {
+                thread::sleep(Duration::MAX);
+            }
+        }
+    };
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
@@ -65,7 +83,9 @@ fn main() -> ExitCode {
             }
         }
 
-        return ExitCode::FAILURE;
+        loop {
+            thread::sleep(Duration::MAX);
+        }
     }
 
     match start() {
