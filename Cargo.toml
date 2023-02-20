@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.68"
+sys-mount = "2.0.2"
 termcolor = "1.1.3"

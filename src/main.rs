@@ -4,6 +4,7 @@ use std::io::Write;
 use std::process::{self, Command, ExitCode};
 use std::thread;
 use std::time::Duration;
+use sys_mount::{Mount, Unmount, UnmountFlags};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 fn start() -> anyhow::Result<()> {
@@ -46,6 +47,12 @@ fn start() -> anyhow::Result<()> {
 
 fn main() -> ExitCode {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
+    let _mount = Mount::builder()
+        .fstype("vfat")
+        .mount("/dev/disk/by-partuuid/00000000-01", "/boot")
+        .expect("can't mount boot partition")
+        .into_unmount_drop(UnmountFlags::DETACH);
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
