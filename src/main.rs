@@ -48,29 +48,50 @@ fn start() -> anyhow::Result<()> {
 fn main() -> ExitCode {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    let _mount;
+    let mut mount = None;
+    let mut mount_err = None;
 
-    match Mount::builder()
-        .fstype("vfat")
-        .mount("/dev/disk/by-partuuid/00000000-01", "/boot")
-    {
-        Ok(v) => _mount = v.into_unmount_drop(UnmountFlags::DETACH),
-        Err(e) => {
+    let devs = ["/dev/mmcblk0p1", "/dev/sda1", "/dev/vda1"];
+
+    for dev in devs {
+        match Mount::builder().fstype("vfat").mount(dev, "/boot") {
+            Ok(v) => mount = Some(v.into_unmount_drop(UnmountFlags::DETACH)),
+            Err(e) => {
+                mount_err = Some(e);
+            }
+        };
+    }
+
+    if mount.is_none() {
+        if let Some(e) = mount_err {
             match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
                 Ok(_) => match writeln!(&mut stdout, "[ ERROR ] Can't mount /boot: {}", e) {
                     Ok(_) => {}
                     Err(_) => println!("[ ERROR ] Can't mount /boot: {}", e),
                 },
+                Err(_) => println!("[ ERROR ] Can't mount /boot: {}", e),
+            }
+        } else {
+            match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+                Ok(_) => match writeln!(
+                    &mut stdout,
+                    "[ ERROR ] Can't mount /boot: Unknown error (this shouldn't happen)"
+                ) {
+                    Ok(_) => {}
+                    Err(_) => println!(
+                        "[ ERROR ] Can't mount /boot: Unknown error (this shouldn't happen)"
+                    ),
+                },
                 Err(_) => {
-                    println!("[ ERROR ] Can't mount /boot: {}", e);
+                    println!("[ ERROR ] Can't mount /boot: Unknown error (this shouldn't happen)")
                 }
             }
-
-            loop {
-                thread::sleep(Duration::MAX);
-            }
         }
-    };
+
+        loop {
+            thread::sleep(Duration::MAX);
+        }
+    }
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
