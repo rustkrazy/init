@@ -4,7 +4,7 @@ use std::io::Write;
 use std::process::{self, Command, ExitCode};
 use std::thread;
 use std::time::Duration;
-use sys_mount::{Mount, Unmount, UnmountFlags};
+use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 fn start() -> anyhow::Result<()> {
@@ -45,7 +45,7 @@ fn start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) {
+fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
     let mut mount = None;
@@ -69,50 +69,54 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) {
         };
     }
 
-    if mount.is_none() {
-        if let Some(e) = mount_err {
-            match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                Ok(_) => {
-                    match writeln!(&mut stdout, "[ ERROR ] Can't mount {}: {}", mount_point, e) {
+    match mount {
+        None => {
+            if let Some(e) = mount_err {
+                match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+                    Ok(_) => {
+                        match writeln!(&mut stdout, "[ ERROR ] Can't mount {}: {}", mount_point, e)
+                        {
+                            Ok(_) => {}
+                            Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
+                        }
+                    }
+                    Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
+                }
+            } else {
+                match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+                    Ok(_) => match writeln!(
+                        &mut stdout,
+                        "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                        mount_point
+                    ) {
                         Ok(_) => {}
-                        Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
+                        Err(_) => println!(
+                            "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                            mount_point
+                        ),
+                    },
+                    Err(_) => {
+                        println!(
+                            "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                            mount_point
+                        )
                     }
                 }
-                Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
             }
-        } else {
-            match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                Ok(_) => match writeln!(
-                    &mut stdout,
-                    "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
-                    mount_point
-                ) {
-                    Ok(_) => {}
-                    Err(_) => println!(
-                        "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
-                        mount_point
-                    ),
-                },
-                Err(_) => {
-                    println!(
-                        "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
-                        mount_point
-                    )
-                }
-            }
-        }
 
-        loop {
-            thread::sleep(Duration::MAX);
+            loop {
+                thread::sleep(Duration::MAX);
+            }
         }
+        Some(handle) => handle,
     }
 }
 
 fn main() -> ExitCode {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    mount_or_halt(1, "/boot", "vfat");
-    mount_or_halt(4, "/data", "ext4");
+    let _ = mount_or_halt(1, "/boot", "vfat");
+    let _ = mount_or_halt(4, "/data", "ext4");
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
