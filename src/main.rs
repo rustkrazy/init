@@ -115,8 +115,8 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount>
 fn main() -> ExitCode {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    let _ = mount_or_halt(1, "/boot", "vfat");
-    let _ = mount_or_halt(4, "/data", "ext4");
+    let _boot_handle = mount_or_halt(1, "/boot", "vfat");
+    let _data_handle = mount_or_halt(4, "/data", "ext4");
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
