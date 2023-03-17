@@ -109,6 +109,8 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) {
 }
 
 fn main() -> ExitCode {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
     mount_or_halt(1, "/boot", "vfat");
     mount_or_halt(4, "/data", "ext4");
 
