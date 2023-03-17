@@ -45,16 +45,20 @@ fn start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() -> ExitCode {
+fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
     let mut mount = None;
     let mut mount_err = None;
 
-    let devs = ["/dev/mmcblk0p1", "/dev/sda1", "/dev/vda1"];
+    let devs = [
+        format!("/dev/mmcblk0p{}", part_id),
+        format!("/dev/sda{}", part_id),
+        format!("/dev/vda{}", part_id),
+    ];
 
-    for dev in devs {
-        match Mount::builder().fstype("vfat").mount(dev, "/boot") {
+    for dev in &devs {
+        match Mount::builder().fstype(fs).mount(dev, mount_point) {
             Ok(v) => {
                 mount = Some(v.into_unmount_drop(UnmountFlags::DETACH));
                 break;
@@ -68,25 +72,32 @@ fn main() -> ExitCode {
     if mount.is_none() {
         if let Some(e) = mount_err {
             match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                Ok(_) => match writeln!(&mut stdout, "[ ERROR ] Can't mount /boot: {}", e) {
-                    Ok(_) => {}
-                    Err(_) => println!("[ ERROR ] Can't mount /boot: {}", e),
-                },
-                Err(_) => println!("[ ERROR ] Can't mount /boot: {}", e),
+                Ok(_) => {
+                    match writeln!(&mut stdout, "[ ERROR ] Can't mount {}: {}", mount_point, e) {
+                        Ok(_) => {}
+                        Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
+                    }
+                }
+                Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
             }
         } else {
             match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
                 Ok(_) => match writeln!(
                     &mut stdout,
-                    "[ ERROR ] Can't mount /boot: Unknown error (this shouldn't happen)"
+                    "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                    mount_point
                 ) {
                     Ok(_) => {}
                     Err(_) => println!(
-                        "[ ERROR ] Can't mount /boot: Unknown error (this shouldn't happen)"
+                        "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                        mount_point
                     ),
                 },
                 Err(_) => {
-                    println!("[ ERROR ] Can't mount /boot: Unknown error (this shouldn't happen)")
+                    println!(
+                        "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                        mount_point
+                    )
                 }
             }
         }
@@ -95,6 +106,11 @@ fn main() -> ExitCode {
             thread::sleep(Duration::MAX);
         }
     }
+}
+
+fn main() -> ExitCode {
+    mount_or_halt(1, "/boot", "vfat");
+    mount_or_halt(4, "/data", "ext4");
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
