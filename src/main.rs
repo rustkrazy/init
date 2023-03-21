@@ -125,6 +125,10 @@ fn main() -> ExitCode {
         .fstype("tmpfs")
         .mount("tmpfs", "/tmp")
         .expect("can't mount /tmp tmpfs");
+    let _run_handle = Mount::builder()
+        .fstype("tmpfs")
+        .mount("tmpfs", "/run")
+        .expect("canÄt mount /run tmpfs");
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
