@@ -117,6 +117,10 @@ fn main() -> ExitCode {
 
     let _boot_handle = mount_or_halt(1, "/boot", "vfat");
     let _data_handle = mount_or_halt(4, "/data", "ext4");
+    let _tmp_handle = Mount::builder()
+        .fstype("tmpfs")
+        .mount("tmpfs", "/tmp")
+        .expect("can't mount /tmp tmpfs");
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
