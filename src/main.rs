@@ -117,6 +117,10 @@ fn main() -> ExitCode {
 
     let _boot_handle = mount_or_halt(1, "/boot", "vfat");
     let _data_handle = mount_or_halt(4, "/data", "ext4");
+    let _proc_handle = Mount::builder()
+        .fstype("proc")
+        .mount("proc", "/proc")
+        .expect("can't mount /proc procfs");
     let _tmp_handle = Mount::builder()
         .fstype("tmpfs")
         .mount("tmpfs", "/tmp")
