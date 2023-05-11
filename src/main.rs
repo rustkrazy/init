@@ -62,8 +62,10 @@ fn log(child: Child, service_name: &str) -> anyhow::Result<()> {
         let mut buf = String::new();
         r.read_line(&mut buf)?;
 
+        let buf = format!("[{}] {}", service_name, buf);
+
         stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-        write!(&mut stdout, "[{}] {}", service_name, buf)?;
+        write!(&mut stdout, "{}", buf)?;
 
         file.write_all(buf.as_bytes())?;
     }
