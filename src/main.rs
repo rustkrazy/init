@@ -1,7 +1,8 @@
 use anyhow::bail;
-use std::fs;
-use std::io::Write;
-use std::process::{self, Command, ExitCode};
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
+use std::process::{self, Child, Command, ExitCode, Stdio};
 use std::thread;
 use std::time::Duration;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
@@ -24,13 +25,20 @@ fn start() -> anyhow::Result<()> {
             continue;
         }
 
-        match Command::new(service.path()).spawn() {
-            Ok(_) => {
+        let mut cmd = Command::new(service.path());
+        cmd.stdout(Stdio::piped());
+
+        match cmd.spawn() {
+            Ok(child) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
                 write!(&mut stdout, "[  OK   ] Starting {}", service_name)?;
 
                 stdout.reset()?;
                 writeln!(&mut stdout)?;
+
+                thread::spawn(move || {
+                    log(child, &service_name).expect("logging failed");
+                });
             }
             Err(e) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
@@ -43,6 +51,25 @@ fn start() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn log(child: Child, service_name: &str) -> anyhow::Result<()> {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let mut file = File::create(Path::new("/data").join(service_name))?;
+    let mut r = BufReader::new(child.stdout.expect("no child stdout"));
+
+    loop {
+        let mut buf = String::new();
+        r.read_line(&mut buf)?;
+
+        stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
+        write!(&mut stdout, "[{}] {}", service_name, buf)?;
+
+        stdout.reset()?;
+        writeln!(&mut stdout)?;
+
+        file.write_all(buf.as_bytes())?;
+    }
 }
 
 fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount> {
