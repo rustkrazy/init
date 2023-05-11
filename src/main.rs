@@ -27,6 +27,7 @@ fn start() -> anyhow::Result<()> {
 
         let mut cmd = Command::new(service.path());
         cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
 
         match cmd.spawn() {
             Ok(child) => {
