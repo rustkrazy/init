@@ -2,7 +2,7 @@ use anyhow::bail;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{self, Child, Command, ExitCode, Stdio};
+use std::process::{self, ChildStderr, ChildStdout, Command, ExitCode, Stdio};
 use std::thread;
 use std::time::Duration;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
@@ -37,8 +37,15 @@ fn start() -> anyhow::Result<()> {
                 stdout.reset()?;
                 writeln!(&mut stdout)?;
 
+                let service_name2 = service_name.clone();
                 thread::spawn(move || {
-                    log(child, service_name).expect("logging failed");
+                    log_out(child.stdout.expect("no child stdout"), service_name2)
+                        .expect("logging stdout failed");
+                });
+
+                thread::spawn(move || {
+                    log_err(child.stderr.expect("no child stderr"), service_name)
+                        .expect("logging stderr failed");
                 });
             }
             Err(e) => {
@@ -54,11 +61,10 @@ fn start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn log(child: Child, service_name: String) -> anyhow::Result<()> {
+fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let mut file = File::create(Path::new("/data").join(service_name.clone() + ".log"))?;
-    let mut r = BufReader::new(child.stdout.expect("no child stdout"));
-    let mut r_err = BufReader::new(child.stderr.expect("no child stderr"));
+    let mut r = BufReader::new(pipe);
 
     loop {
         let mut buf = String::new();
@@ -72,17 +78,25 @@ fn log(child: Child, service_name: String) -> anyhow::Result<()> {
 
             file.write_all(buf.as_bytes())?;
         }
+    }
+}
 
-        let mut buf_err = String::new();
-        r_err.read_line(&mut buf_err)?;
+fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+    let mut file = File::create(Path::new("/data").join(service_name.clone() + ".log"))?;
+    let mut r = BufReader::new(pipe);
 
-        if !buf_err.is_empty() {
-            let buf_err = format!("[{}] {}", service_name, buf_err);
+    loop {
+        let mut buf = String::new();
+        r.read_line(&mut buf)?;
+
+        if !buf.is_empty() {
+            let buf = format!("[{}] {}", service_name, buf);
 
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-            write!(&mut stdout, "{}", buf_err)?;
+            write!(&mut stdout, "{}", buf)?;
 
-            file.write_all(buf_err.as_bytes())?;
+            file.write_all(buf.as_bytes())?;
         }
     }
 }
