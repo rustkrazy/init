@@ -37,7 +37,7 @@ fn start() -> anyhow::Result<()> {
                 writeln!(&mut stdout)?;
 
                 thread::spawn(move || {
-                    log(child, &service_name).expect("logging failed");
+                    log(child, service_name).expect("logging failed");
                 });
             }
             Err(e) => {
@@ -53,9 +53,9 @@ fn start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn log(child: Child, service_name: &str) -> anyhow::Result<()> {
+fn log(child: Child, service_name: String) -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut file = File::create(Path::new("/data").join(service_name).join(".log"))?;
+    let mut file = File::create(Path::new("/data").join(service_name.clone() + ".log"))?;
     let mut r = BufReader::new(child.stdout.expect("no child stdout"));
 
     loop {
