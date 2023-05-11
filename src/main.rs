@@ -55,7 +55,7 @@ fn start() -> anyhow::Result<()> {
 
 fn log(child: Child, service_name: &str) -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut file = File::create(Path::new("/data").join(service_name))?;
+    let mut file = File::create(Path::new("/data").join(service_name).join(".log"))?;
     let mut r = BufReader::new(child.stdout.expect("no child stdout"));
 
     loop {
