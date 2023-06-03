@@ -88,7 +88,7 @@ fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
                         stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
                         write!(
                             &mut stdout,
-                            "[ INFO  ] {} exited with code {}",
+                            "[ INFO  ] {} exited with {}",
                             service_name, status
                         )?;
 
