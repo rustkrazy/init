@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{self, ChildStderr, ChildStdout, Command, ExitCode, Stdio};
@@ -8,6 +8,8 @@ use std::time::{Duration, SystemTime};
 use anyhow::bail;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+
+const SERVICE_RESTART_INTERVAL: Duration = Duration::from_secs(30);
 
 fn start() -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -26,40 +28,97 @@ fn start() -> anyhow::Result<()> {
             continue;
         }
 
+        thread::spawn(move || match supervise(service, service_name.clone()) {
+            Ok(_) => {}
+            Err(e) => {
+                let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
+                match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
+                    Ok(_) => match writeln!(
+                        &mut stdout,
+                        "[ ERROR ] can't supervise {}: {}",
+                        service_name, e
+                    ) {
+                        Ok(_) => {}
+                        Err(_) => println!("[ ERROR ] can't supervise {}: {}", service_name, e),
+                    },
+                    Err(_) => {
+                        println!("[ ERROR ] can't supervise {}: {}", service_name, e);
+                    }
+                }
+            }
+        });
+    }
+
+    Ok(())
+}
+
+fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
+    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
+    loop {
         let mut cmd = Command::new(service.path());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
         match cmd.spawn() {
-            Ok(child) => {
+            Ok(mut child) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                write!(&mut stdout, "[  OK   ] Starting {}", service_name)?;
+                write!(&mut stdout, "[  OK   ] starting {}", service_name)?;
 
                 stdout.reset()?;
                 writeln!(&mut stdout)?;
 
+                let child_stdout = child.stdout.take();
                 let service_name2 = service_name.clone();
                 thread::spawn(move || {
-                    log_out(child.stdout.expect("no child stdout"), service_name2)
+                    log_out(child_stdout.expect("no child stdout"), service_name2)
                         .expect("logging stdout failed");
                 });
 
+                let child_stderr = child.stderr.take();
+                let service_name2 = service_name.clone();
                 thread::spawn(move || {
-                    log_err(child.stderr.expect("no child stderr"), service_name)
+                    log_err(child_stderr.expect("no child stderr"), service_name2)
                         .expect("logging stderr failed");
                 });
+
+                match child.wait() {
+                    Ok(status) => {
+                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+                        write!(
+                            &mut stdout,
+                            "[ INFO  ] {} exited with code {}",
+                            service_name, status
+                        )?;
+
+                        stdout.reset()?;
+                        writeln!(&mut stdout)?;
+                    }
+                    Err(e) => {
+                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
+                        write!(
+                            &mut stdout,
+                            "[ ERROR ] can't wait for {} to exit: {}",
+                            service_name, e
+                        )?;
+
+                        stdout.reset()?;
+                        writeln!(&mut stdout)?;
+                    }
+                }
             }
             Err(e) => {
                 stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                write!(&mut stdout, "[ ERROR ] Starting {}: {}", service_name, e)?;
+                write!(&mut stdout, "[ ERROR ] starting {}: {}", service_name, e)?;
 
                 stdout.reset()?;
                 writeln!(&mut stdout)?;
             }
         }
-    }
 
-    Ok(())
+        thread::sleep(SERVICE_RESTART_INTERVAL);
+    }
 }
 
 fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
@@ -133,30 +192,30 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount>
             if let Some(e) = mount_err {
                 match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
                     Ok(_) => {
-                        match writeln!(&mut stdout, "[ ERROR ] Can't mount {}: {}", mount_point, e)
+                        match writeln!(&mut stdout, "[ ERROR ] can't mount {}: {}", mount_point, e)
                         {
                             Ok(_) => {}
-                            Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
+                            Err(_) => println!("[ ERROR ] can't mount {}: {}", mount_point, e),
                         }
                     }
-                    Err(_) => println!("[ ERROR ] Can't mount {}: {}", mount_point, e),
+                    Err(_) => println!("[ ERROR ] can't mount {}: {}", mount_point, e),
                 }
             } else {
                 match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
                     Ok(_) => match writeln!(
                         &mut stdout,
-                        "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                        "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
                         mount_point
                     ) {
                         Ok(_) => {}
                         Err(_) => println!(
-                            "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                            "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
                             mount_point
                         ),
                     },
                     Err(_) => {
                         println!(
-                            "[ ERROR ] Can't mount {}: Unknown error (this shouldn't happen)",
+                            "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
                             mount_point
                         )
                     }
@@ -191,12 +250,12 @@ fn main() -> ExitCode {
 
     if process::id() != 1 {
         match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-            Ok(_) => match writeln!(&mut stdout, "Must be run as PID 1") {
+            Ok(_) => match writeln!(&mut stdout, "[ ERROR ] must be run as PID 1") {
                 Ok(_) => {}
-                Err(_) => println!("Must be run as PID 1"),
+                Err(_) => println!("[ ERROR ] must be run as PID 1"),
             },
             Err(_) => {
-                println!("Must be run as PID 1");
+                println!("[ ERROR ] must be run as PID 1");
             }
         }
 
