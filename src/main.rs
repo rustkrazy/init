@@ -1,10 +1,11 @@
-use anyhow::bail;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{self, ChildStderr, ChildStdout, Command, ExitCode, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+use anyhow::bail;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -71,7 +72,8 @@ fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
         r.read_line(&mut buf)?;
 
         if !buf.is_empty() {
-            let buf = format!("[{}] {}", service_name, buf);
+            let timestamp = humantime::format_rfc3339_seconds(SystemTime::now());
+            let buf = format!("[{} {}] {}", timestamp, service_name, buf);
 
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
             write!(&mut stdout, "{}", buf)?;
@@ -91,7 +93,8 @@ fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
         r.read_line(&mut buf)?;
 
         if !buf.is_empty() {
-            let buf = format!("[{}] {}", service_name, buf);
+            let timestamp = humantime::format_rfc3339_seconds(SystemTime::now());
+            let buf = format!("[{} {}] {}", timestamp, service_name, buf);
 
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
             write!(&mut stdout, "{}", buf)?;
