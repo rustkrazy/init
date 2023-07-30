@@ -123,7 +123,7 @@ fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
 
 fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut file = File::create(Path::new("/data").join(service_name.clone() + ".log"))?;
+    let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".log"))?;
     let mut r = BufReader::new(pipe);
 
     loop {
@@ -144,7 +144,7 @@ fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
 
 fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    let mut file = File::create(Path::new("/data").join(service_name.clone() + ".err"))?;
+    let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".err"))?;
     let mut r = BufReader::new(pipe);
 
     loop {
