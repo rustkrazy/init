@@ -1,5 +1,5 @@
 use std::fs::{self, DirEntry, File};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Seek, Write};
 use std::path::Path;
 use std::process::{self, ChildStderr, ChildStdout, Command, ExitCode, Stdio};
 use std::thread;
@@ -130,6 +130,11 @@ fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
         let mut buf = String::new();
         r.read_line(&mut buf)?;
 
+        if file.metadata()?.len() > 30000000 {
+            file.set_len(0)?;
+            file.rewind()?;
+        }
+
         if !buf.is_empty() {
             let timestamp = humantime::format_rfc3339_seconds(SystemTime::now());
             let buf = format!("[{} {}] {}", timestamp, service_name, buf);
@@ -150,6 +155,11 @@ fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
     loop {
         let mut buf = String::new();
         r.read_line(&mut buf)?;
+
+        if file.metadata()?.len() > 30000000 {
+            file.set_len(0)?;
+            file.rewind()?;
+        }
 
         if !buf.is_empty() {
             let timestamp = humantime::format_rfc3339_seconds(SystemTime::now());
