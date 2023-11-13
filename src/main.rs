@@ -1,7 +1,7 @@
 use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, Seek, Write};
 use std::path::Path;
-use std::process::{self, ChildStderr, ChildStdout, Command, ExitCode, Stdio};
+use std::process::{self, ChildStderr, ChildStdout, Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -223,7 +223,7 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount>
     }
 }
 
-fn main() -> ExitCode {
+fn main() {
     if process::id() != 1 {
         log!(Color::Red, "[ ERROR ] must be run as PID 1");
         halt!();
