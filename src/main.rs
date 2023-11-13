@@ -51,6 +51,9 @@ macro_rules! log_raw {
 
 macro_rules! halt {
     () => {
+        thread::park();
+
+        // Just in case. Still better than panicking.
         loop {
             thread::sleep(Duration::MAX);
         }
