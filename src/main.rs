@@ -224,6 +224,11 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount>
 }
 
 fn main() -> ExitCode {
+    if process::id() != 1 {
+        log!(Color::Red, "[ ERROR ] must be run as PID 1");
+        halt!();
+    }
+
     let _boot_handle = mount_or_halt(1, "/boot", "vfat");
     let _data_handle = mount_or_halt(4, "/data", "ext4");
     let _proc_handle = Mount::builder()
@@ -238,11 +243,6 @@ fn main() -> ExitCode {
         .fstype("tmpfs")
         .mount("tmpfs", "/run")
         .expect("can't mount /run tmpfs");
-
-    if process::id() != 1 {
-        log!(Color::Red, "[ ERROR ] must be run as PID 1");
-        halt!();
-    }
 
     match start() {
         Ok(_) => {}
