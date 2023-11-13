@@ -1,11 +1,10 @@
 use std::fs::{self, DirEntry, File};
-use std::io::{BufRead, BufReader, Seek, Write};
+use std::io::{BufRead, BufReader, Result, Seek, Write};
 use std::path::Path;
 use std::process::{self, ChildStderr, ChildStdout, Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use anyhow::bail;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
@@ -60,14 +59,17 @@ macro_rules! halt {
     };
 }
 
-fn start() -> anyhow::Result<()> {
+fn start() -> Result<()> {
     log!(Color::Yellow, "Starting rustkrazy");
 
     for service in fs::read_dir("/bin")? {
         let service = service?;
         let service_name = match service.file_name().into_string() {
             Ok(v) => v,
-            Err(_) => bail!("[ ERROR ] invalid unicode in file name"),
+            Err(_) => {
+                log!(Color::Red, "[ ERROR ] invalid unicode in file name");
+                continue;
+            }
         };
 
         if service_name == "init" {
@@ -83,7 +85,7 @@ fn start() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
+fn supervise(service: DirEntry, service_name: String) -> Result<()> {
     loop {
         let mut cmd = Command::new(service.path());
         cmd.stdout(Stdio::piped());
@@ -135,7 +137,7 @@ fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
     }
 }
 
-fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
+fn log_out(pipe: ChildStdout, service_name: String) -> Result<()> {
     let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".log"))?;
     let mut r = BufReader::new(pipe);
 
@@ -159,7 +161,7 @@ fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
     }
 }
 
-fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
+fn log_err(pipe: ChildStderr, service_name: String) -> Result<()> {
     let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".err"))?;
     let mut r = BufReader::new(pipe);
 
