@@ -11,11 +11,54 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 const SERVICE_RESTART_INTERVAL: Duration = Duration::from_secs(30);
 
-fn start() -> anyhow::Result<()> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
+macro_rules! log {
+    ($col:expr, $($tts:tt)*) => {
+        {
+            let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-    writeln!(&mut stdout, "Starting rustkrazy")?;
+            match stdout.set_color(ColorSpec::new().set_fg(Some($col))) {
+                Ok(_) => match write!(&mut stdout, $($tts)*) {
+                    Ok(_) => {
+                        stdout.reset().ok();
+                        match writeln!(&mut stdout) {
+                            Ok(_) => {}
+                            Err(_) => println!(),
+                        }
+                    }
+                    Err(_) => println!($($tts)*),
+                }
+                Err(_) => println!($($tts)*),
+            }
+        }
+    };
+}
+
+macro_rules! log_raw {
+    ($col:expr, $($tts:tt)*) => {
+        {
+            let mut stdout = StandardStream::stdout(ColorChoice::Always);
+
+            match stdout.set_color(ColorSpec::new().set_fg(Some($col))) {
+                Ok(_) => match write!(&mut stdout, $($tts)*) {
+                    Ok(_) => {}
+                    Err(_) => print!($($tts)*),
+                }
+                Err(_) => print!($($tts)*),
+            }
+        }
+    };
+}
+
+macro_rules! halt {
+    () => {
+        loop {
+            thread::sleep(Duration::MAX);
+        }
+    };
+}
+
+fn start() -> anyhow::Result<()> {
+    log!(Color::Yellow, "Starting rustkrazy");
 
     for service in fs::read_dir("/bin")? {
         let service = service?;
@@ -30,23 +73,7 @@ fn start() -> anyhow::Result<()> {
 
         thread::spawn(move || match supervise(service, service_name.clone()) {
             Ok(_) => {}
-            Err(e) => {
-                let mut stdout = StandardStream::stdout(ColorChoice::Always);
-
-                match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                    Ok(_) => match writeln!(
-                        &mut stdout,
-                        "[ ERROR ] can't supervise {}: {}",
-                        service_name, e
-                    ) {
-                        Ok(_) => {}
-                        Err(_) => println!("[ ERROR ] can't supervise {}: {}", service_name, e),
-                    },
-                    Err(_) => {
-                        println!("[ ERROR ] can't supervise {}: {}", service_name, e);
-                    }
-                }
-            }
+            Err(e) => log!(Color::Red, "can't supervise {}: {}", service_name, e),
         });
     }
 
@@ -54,8 +81,6 @@ fn start() -> anyhow::Result<()> {
 }
 
 fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-
     loop {
         let mut cmd = Command::new(service.path());
         cmd.stdout(Stdio::piped());
@@ -63,11 +88,7 @@ fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
 
         match cmd.spawn() {
             Ok(mut child) => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-                write!(&mut stdout, "[  OK   ] starting {}", service_name)?;
-
-                stdout.reset()?;
-                writeln!(&mut stdout)?;
+                log!(Color::Green, "[  OK   ] starting {}", service_name);
 
                 let child_stdout = child.stdout.take();
                 let service_name2 = service_name.clone();
@@ -85,35 +106,25 @@ fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
 
                 match child.wait() {
                     Ok(status) => {
-                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
-                        write!(
-                            &mut stdout,
+                        log!(
+                            Color::Yellow,
                             "[ INFO  ] {} exited with {}",
-                            service_name, status
-                        )?;
-
-                        stdout.reset()?;
-                        writeln!(&mut stdout)?;
+                            service_name,
+                            status
+                        );
                     }
                     Err(e) => {
-                        stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                        write!(
-                            &mut stdout,
+                        log!(
+                            Color::Red,
                             "[ ERROR ] can't wait for {} to exit: {}",
-                            service_name, e
-                        )?;
-
-                        stdout.reset()?;
-                        writeln!(&mut stdout)?;
+                            service_name,
+                            e
+                        );
                     }
                 }
             }
             Err(e) => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-                write!(&mut stdout, "[ ERROR ] starting {}: {}", service_name, e)?;
-
-                stdout.reset()?;
-                writeln!(&mut stdout)?;
+                log!(Color::Red, "[ ERROR ] starting {}: {}", service_name, e);
             }
         }
 
@@ -122,7 +133,6 @@ fn supervise(service: DirEntry, service_name: String) -> anyhow::Result<()> {
 }
 
 fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".log"))?;
     let mut r = BufReader::new(pipe);
 
@@ -139,8 +149,7 @@ fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
             let timestamp = humantime::format_rfc3339_seconds(SystemTime::now());
             let buf = format!("[{} {}] {}", timestamp, service_name, buf);
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-            write!(&mut stdout, "{}", buf)?;
+            log_raw!(Color::White, "{}", buf);
 
             file.write_all(buf.as_bytes())?;
         }
@@ -148,7 +157,6 @@ fn log_out(pipe: ChildStdout, service_name: String) -> anyhow::Result<()> {
 }
 
 fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
     let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".err"))?;
     let mut r = BufReader::new(pipe);
 
@@ -165,8 +173,7 @@ fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
             let timestamp = humantime::format_rfc3339_seconds(SystemTime::now());
             let buf = format!("[{} {}] {}", timestamp, service_name, buf);
 
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::White)))?;
-            write!(&mut stdout, "{}", buf)?;
+            log_raw!(Color::White, "{}", buf);
 
             file.write_all(buf.as_bytes())?;
         }
@@ -174,8 +181,6 @@ fn log_err(pipe: ChildStderr, service_name: String) -> anyhow::Result<()> {
 }
 
 fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-
     let mut mount = None;
     let mut mount_err = None;
 
@@ -200,49 +205,22 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount>
     match mount {
         None => {
             if let Some(e) = mount_err {
-                match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                    Ok(_) => {
-                        match writeln!(&mut stdout, "[ ERROR ] can't mount {}: {}", mount_point, e)
-                        {
-                            Ok(_) => {}
-                            Err(_) => println!("[ ERROR ] can't mount {}: {}", mount_point, e),
-                        }
-                    }
-                    Err(_) => println!("[ ERROR ] can't mount {}: {}", mount_point, e),
-                }
+                log!(Color::Red, "[ ERROR ] can't mount {}: {}", mount_point, e)
             } else {
-                match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-                    Ok(_) => match writeln!(
-                        &mut stdout,
-                        "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
-                        mount_point
-                    ) {
-                        Ok(_) => {}
-                        Err(_) => println!(
-                            "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
-                            mount_point
-                        ),
-                    },
-                    Err(_) => {
-                        println!(
-                            "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
-                            mount_point
-                        )
-                    }
-                }
+                log!(
+                    Color::Red,
+                    "[ ERROR ] can't mount {}: unknown error (this shouldn't happen)",
+                    mount_point
+                );
             }
 
-            loop {
-                thread::sleep(Duration::MAX);
-            }
+            halt!();
         }
         Some(handle) => handle,
     }
 }
 
 fn main() -> ExitCode {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-
     let _boot_handle = mount_or_halt(1, "/boot", "vfat");
     let _data_handle = mount_or_halt(4, "/data", "ext4");
     let _proc_handle = Mount::builder()
@@ -259,35 +237,14 @@ fn main() -> ExitCode {
         .expect("can't mount /run tmpfs");
 
     if process::id() != 1 {
-        match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-            Ok(_) => match writeln!(&mut stdout, "[ ERROR ] must be run as PID 1") {
-                Ok(_) => {}
-                Err(_) => println!("[ ERROR ] must be run as PID 1"),
-            },
-            Err(_) => {
-                println!("[ ERROR ] must be run as PID 1");
-            }
-        }
-
-        loop {
-            thread::sleep(Duration::MAX);
-        }
+        log!(Color::Red, "[ ERROR ] must be run as PID 1");
+        halt!();
     }
 
     match start() {
         Ok(_) => {}
-        Err(e) => match stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))) {
-            Ok(_) => match writeln!(&mut stdout, "[ ERROR ] {}", e) {
-                Ok(_) => {}
-                Err(_) => println!("[ ERROR ] {}", e),
-            },
-            Err(_) => {
-                println!("[ ERROR ] {}", e);
-            }
-        },
+        Err(e) => log!(Color::Red, "[ ERROR ] {}", e),
     }
 
-    loop {
-        thread::sleep(Duration::MAX);
-    }
+    halt!();
 }
