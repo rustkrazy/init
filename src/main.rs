@@ -5,7 +5,11 @@ use std::process::{self, ChildStderr, ChildStdout, Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use tokio::signal::unix::{signal, SignalKind};
+
+use nix::sys::reboot::RebootMode;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
+use sysinfo::{ProcessExt, Signal, System, SystemExt};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 const SERVICE_RESTART_INTERVAL: Duration = Duration::from_secs(30);
@@ -225,7 +229,26 @@ fn mount_or_halt(part_id: u8, mount_point: &str, fs: &str) -> UnmountDrop<Mount>
     }
 }
 
-fn main() {
+fn end() {
+    log!(Color::Yellow, "[ INFO  ] send SIGTERM to all processes");
+    for process in System::new_all().processes().values() {
+        process.kill_with(Signal::Term);
+    }
+
+    thread::sleep(Duration::from_secs(3));
+}
+
+fn reboot() -> RebootMode {
+    end();
+    RebootMode::RB_AUTOBOOT
+}
+
+fn poweroff() -> RebootMode {
+    end();
+    RebootMode::RB_POWER_OFF
+}
+
+async fn run() -> RebootMode {
     if process::id() != 1 {
         log!(Color::Red, "[ ERROR ] must be run as PID 1");
         halt!();
@@ -251,5 +274,52 @@ fn main() {
         Err(e) => log!(Color::Red, "[ ERROR ] {}", e),
     }
 
-    halt!();
+    let mut sigusr1 = match signal(SignalKind::user_defined1()) {
+        Ok(v) => v,
+        Err(e) => {
+            log!(Color::Red, "[ ERROR ] can't subscribe to SIGUSR1: {}", e);
+            halt!();
+        }
+    };
+    let mut sigusr2 = match signal(SignalKind::user_defined2()) {
+        Ok(v) => v,
+        Err(e) => {
+            log!(Color::Red, "[ ERROR ] can't subscribe to SIGUSR2: {}", e);
+            halt!();
+        }
+    };
+
+    tokio::select! {
+        _ = sigusr1.recv() => reboot(),
+        _ = sigusr2.recv() => poweroff(),
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let reboot_mode = run().await;
+
+    nix::unistd::sync();
+
+    log!(Color::Yellow, "[ INFO  ] send final SIGTERM");
+    for process in System::new_all().processes().values() {
+        process.kill_with(Signal::Term);
+    }
+
+    thread::sleep(Duration::from_secs(3));
+
+    log!(Color::Yellow, "[ INFO  ] send final SIGKILL");
+    for process in System::new_all().processes().values() {
+        process.kill_with(Signal::Kill);
+    }
+
+    if let Err(e) = nix::sys::reboot::reboot(reboot_mode) {
+        log!(
+            Color::Red,
+            "[ ERROR ] can't reboot (mode: {:?}): {}",
+            reboot_mode,
+            e
+        );
+        halt!();
+    }
 }
