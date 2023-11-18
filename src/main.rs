@@ -147,7 +147,10 @@ fn log_out(pipe: ChildStdout, service_name: String) -> Result<()> {
 
     loop {
         let mut buf = String::new();
-        r.read_line(&mut buf)?;
+        if r.read_line(&mut buf)? == 0 {
+            log!(Color::Yellow, "[ INFO  ] {} closed stdout", service_name);
+            return Ok(());
+        }
 
         if file.metadata()?.len() > 30000000 {
             file.set_len(0)?;
@@ -171,7 +174,10 @@ fn log_err(pipe: ChildStderr, service_name: String) -> Result<()> {
 
     loop {
         let mut buf = String::new();
-        r.read_line(&mut buf)?;
+        if r.read_line(&mut buf)? == 0 {
+            log!(Color::Yellow, "[ INFO  ] {} closed stderr", service_name);
+            return Ok(());
+        }
 
         if file.metadata()?.len() > 30000000 {
             file.set_len(0)?;
