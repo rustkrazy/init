@@ -169,7 +169,7 @@ fn log_out(pipe: ChildStdout, service_name: String) -> Result<()> {
 }
 
 fn log_err(pipe: ChildStderr, service_name: String) -> Result<()> {
-    let mut file = File::create(Path::new("/tmp").join(service_name.clone() + ".err"))?;
+    let mut file = File::create(Path::new("/data").join(service_name.clone() + ".err"))?;
     let mut r = BufReader::new(pipe);
 
     loop {
