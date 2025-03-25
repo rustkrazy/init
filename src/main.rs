@@ -10,28 +10,13 @@ use tokio::signal::unix::{signal, SignalKind};
 use nix::sys::reboot::RebootMode;
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
 use sysinfo::{ProcessExt, Signal, System, SystemExt};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 const SERVICE_RESTART_INTERVAL: Duration = Duration::from_secs(30);
 
 macro_rules! log {
     ($col:expr, $($tts:tt)*) => {
         {
-            let mut stdout = StandardStream::stdout(ColorChoice::Always);
-
-            match stdout.set_color(ColorSpec::new().set_fg(Some($col))) {
-                Ok(_) => match write!(&mut stdout, $($tts)*) {
-                    Ok(_) => {
-                        stdout.reset().ok();
-                        match writeln!(&mut stdout) {
-                            Ok(_) => {}
-                            Err(_) => println!(),
-                        }
-                    }
-                    Err(_) => println!($($tts)*),
-                }
-                Err(_) => println!($($tts)*),
-            }
+            println!($($tts)*);
         }
     };
 }
@@ -39,15 +24,7 @@ macro_rules! log {
 macro_rules! log_raw {
     ($col:expr, $($tts:tt)*) => {
         {
-            let mut stdout = StandardStream::stdout(ColorChoice::Always);
-
-            match stdout.set_color(ColorSpec::new().set_fg(Some($col))) {
-                Ok(_) => match write!(&mut stdout, $($tts)*) {
-                    Ok(_) => {}
-                    Err(_) => print!($($tts)*),
-                }
-                Err(_) => print!($($tts)*),
-            }
+            print!($($tts)*);
         }
     };
 }
