@@ -5,9 +5,8 @@ use std::process::{self, ChildStderr, ChildStdout, Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use tokio::signal::unix::{signal, SignalKind};
-
 use nix::sys::reboot::RebootMode;
+use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal as Sig};
 use sys_mount::{Mount, Unmount, UnmountDrop, UnmountFlags};
 use sysinfo::{ProcessExt, Signal, System, SystemExt};
 
@@ -31,11 +30,8 @@ macro_rules! log_raw {
 
 macro_rules! halt {
     () => {
-        thread::park();
-
-        // Just in case. Still better than panicking.
         loop {
-            thread::sleep(Duration::MAX);
+            thread::park();
         }
     };
 }
@@ -221,17 +217,17 @@ fn end() {
     thread::sleep(Duration::from_secs(3));
 }
 
-fn reboot() -> RebootMode {
+extern "C" fn reboot(_: i32) {
     end();
-    RebootMode::RB_AUTOBOOT
+    sysreset(RebootMode::RB_AUTOBOOT);
 }
 
-fn poweroff() -> RebootMode {
+extern "C" fn poweroff(_: i32) {
     end();
-    RebootMode::RB_POWER_OFF
+    sysreset(RebootMode::RB_POWER_OFF);
 }
 
-async fn run() -> RebootMode {
+fn main() {
     if process::id() != 1 {
         log!(Color::Red, "[ ERROR ] must be run as PID 1");
         halt!();
@@ -257,31 +253,44 @@ async fn run() -> RebootMode {
         Err(e) => log!(Color::Red, "[ ERROR ] {}", e),
     }
 
-    let mut sigusr1 = match signal(SignalKind::user_defined1()) {
-        Ok(v) => v,
-        Err(e) => {
-            log!(Color::Red, "[ ERROR ] can't subscribe to SIGUSR1: {}", e);
-            halt!();
-        }
-    };
-    let mut sigusr2 = match signal(SignalKind::user_defined2()) {
-        Ok(v) => v,
-        Err(e) => {
-            log!(Color::Red, "[ ERROR ] can't subscribe to SIGUSR2: {}", e);
-            halt!();
-        }
-    };
+    let reboot_action = SigAction::new(
+        SigHandler::Handler(reboot),
+        SaFlags::empty(),
+        SigSet::from(Sig::SIGUSR1),
+    );
 
-    tokio::select! {
-        _ = sigusr1.recv() => reboot(),
-        _ = sigusr2.recv() => poweroff(),
+    let shutdown_action = SigAction::new(
+        SigHandler::Handler(poweroff),
+        SaFlags::empty(),
+        SigSet::from(Sig::SIGUSR2),
+    );
+
+    unsafe {
+        match nix::sys::signal::sigaction(Sig::SIGUSR1, &reboot_action) {
+            Ok(_) => {}
+            Err(e) => log!(
+                Color::Red,
+                "[ ERROR ] can't subscribe to SIGUSR1: {}",
+                e.desc()
+            ),
+        }
     }
+
+    unsafe {
+        match nix::sys::signal::sigaction(Sig::SIGUSR2, &shutdown_action) {
+            Ok(_) => {}
+            Err(e) => log!(
+                Color::Red,
+                "[ ERROR ] can't subscribe to SIGUSR2: {}",
+                e.desc()
+            ),
+        }
+    }
+
+    halt!();
 }
 
-#[tokio::main]
-async fn main() {
-    let reboot_mode = run().await;
-
+fn sysreset(reboot_mode: RebootMode) {
     nix::unistd::sync();
 
     log!(Color::Yellow, "[ INFO  ] send final SIGTERM");
@@ -296,13 +305,12 @@ async fn main() {
         process.kill_with(Signal::Kill);
     }
 
-    if let Err(e) = nix::sys::reboot::reboot(reboot_mode) {
-        log!(
-            Color::Red,
-            "[ ERROR ] can't reboot (mode: {:?}): {}",
-            reboot_mode,
-            e
-        );
-        halt!();
-    }
+    let Err(e) = nix::sys::reboot::reboot(reboot_mode);
+    log!(
+        Color::Red,
+        "[ ERROR ] can't reboot (mode: {:?}): {}",
+        reboot_mode,
+        e
+    );
+    halt!();
 }
